@@ -289,16 +289,90 @@
     return lines;
   }
 
+  //create text layout for canvas frame
+  function createTextLayout(state, text) {
+    const maxWidth = state.width * 0.78;
+    let fontSize = Math.min(48, state.width * 0.055, state.height * 0.12);
+
+    if (text.length > 150) {
+      fontSize *= 0.78;
+    } else if (text.length > 110) {
+      fontSize *= 0.88;
+    }
+
+    //max font size is 48px - depends on the width and height of the canvas
+    fontSize = Math.max(24, fontSize);
+
+    let lines = [];
+
+    //slowly decrease the font size until we have 5 lines or less for better readability
+    while (fontSize >= 24) {
+      state.context.font = `${Math.round(fontSize)}px Georgia, "Times New Roman", serif`;
+      lines = wrapLines(state.context, text, maxWidth);
+
+      if (lines.length <= 5) break;
+
+      fontSize -= 2;
+    }
+
+    return {
+      fontSize,
+      lineHeight: fontSize * 1.4,
+      lines,
+    };
+  }
+
+  //draw a frame on the canvas
+  function drawFrame(state, text, opacity) {
+    const context = state.context;
+
+    //clear the canvas
+    context.clearRect(0, 0, state.width, state.height);
+    context.fillStyle = "#ffffff";
+    context.fillRect(0, 0, state.width, state.height);
+    context.strokeStyle = "rgba(0, 0, 0, 0.08)";
+    context.strokeRect(0.5, 0.5, state.width - 1, state.height - 1);
+
+    if (!text) return;
+
+    //create the text layout
+    const layout = createTextLayout(state, text);
+    const totalHeight = layout.lineHeight * layout.lines.length;
+    let y = (state.height - totalHeight) / 2 + layout.fontSize;
+
+    
+    context.globalAlpha = opacity;
+    context.fillStyle = "#111111";
+    context.textAlign = "center";
+    context.textBaseline = "alphabetic";
+    context.font = `${Math.round(layout.fontSize)}px Georgia, "Times New Roman", serif`;
+
+    for (const line of layout.lines) {
+      context.fillText(line, state.width / 2, y);
+      y += layout.lineHeight;
+    }
+
+    context.globalAlpha = 1;
+  }
+
+  const handleResize = () => {
+    resizeCanvas(state);
+  };
+
   function cleanup() {
     window.removeEventListener("resize", handleResize);
   }
 
-  handleResize = () => {
-    resizeCanvas(state);
-  };
-
   window.pageToMovie = {
     cleanup,
   };
+
+  createStage();
+  const state = {
+    canvas: document.querySelector("canvas"),
+    context: document.querySelector("canvas").getContext("2d"),
+  };
   
+  resizeCanvas(state);
+  drawFrame(state, "Hello world!", 1);
 })();

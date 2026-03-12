@@ -198,5 +198,36 @@
     return duration;
   }
 
+  function createStage() {
+    const html = document.documentElement;
+    const body = document.body;
+    const canvas = document.createElement("canvas");
+    const context = canvas.getContext("2d");
+
+    html.style.margin = "0";
+    html.style.width = "100%";
+    html.style.height = "100%";
+    html.style.background = "#ffffff";
+
+    body.innerHTML = "";
+    body.style.margin = "0";
+    body.style.width = "100vw";
+    body.style.height = "100vh";
+    body.style.overflow = "hidden";
+    body.style.display = "flex";
+    body.style.alignItems = "center";
+    body.style.justifyContent = "center";
+    body.style.background = "#ffffff";
+
+    canvas.style.display = "block";
+    canvas.style.background = "#ffffff";
+    canvas.style.boxShadow = "0 20px 60px rgba(0, 0, 0, 0.08)";
+    canvas.style.maxWidth = "100vw";
+    canvas.style.maxHeight = "100vh";
+
+    body.appendChild(canvas);
+
+    return { canvas, context };
+  }
   
 })();

@@ -1,5 +1,6 @@
 (() => {
   //first clean up the page
+  let text = "";
   if (window.pageToMovie && typeof window.pageToMovie.cleanup === "function") {
     window.pageToMovie.cleanup();
   }
@@ -338,9 +339,11 @@
     //create the text layout
     const layout = createTextLayout(state, text);
     const totalHeight = layout.lineHeight * layout.lines.length;
+
+    //position of the text - middle of the canvas
+    const x = state.width / 2;
     let y = (state.height - totalHeight) / 2 + layout.fontSize;
 
-    
     context.globalAlpha = opacity;
     context.fillStyle = "#111111";
     context.textAlign = "center";
@@ -348,31 +351,65 @@
     context.font = `${Math.round(layout.fontSize)}px Georgia, "Times New Roman", serif`;
 
     for (const line of layout.lines) {
-      context.fillText(line, state.width / 2, y);
+      //draw the text in the middle of the canvas
+      context.fillText(line, x, y);
       y += layout.lineHeight;
     }
 
     context.globalAlpha = 1;
   }
 
-  const handleResize = () => {
-    resizeCanvas(state);
-  };
+  //get the opacity of the text - fade in and out
+  //based on what step we are in the animation
+  //movie-like effect
+  function getOpacity(elapsed, holdDuration) {
+    const fadeDuration = Math.min(500, holdDuration * 0.25);
+    const totalDuration = holdDuration + fadeDuration * 2;
 
-  function cleanup() {
-    window.removeEventListener("resize", handleResize);
+    if (elapsed < fadeDuration) {
+      return elapsed / fadeDuration;
+    }
+
+    if (elapsed > totalDuration - fadeDuration) {
+      return Math.max(0, (totalDuration - elapsed) / fadeDuration);
+    }
+
+    return 1;
   }
 
-  window.pageToMovie = {
-    cleanup,
+  const handleResize = () => {
+    resizeCanvas(state);
+    const currentSentence = state.sentences[state.index];
+    drawFrame(state, currentSentence ? currentSentence.text : "", 1);
   };
 
-  createStage();
+  const extractedText = extractText();
+  const sentences = splitIntoSentences(extractedText);
+  const safeSentences = (sentences.length
+    ? sentences
+    : ["No readable text was found on this page."]
+  ).map((text) => ({
+    text,
+    duration: getSentenceDuration(text),
+  }));
+  const stage = createStage();
   const state = {
-    canvas: document.querySelector("canvas"),
-    context: document.querySelector("canvas").getContext("2d"),
+    ...stage,
+    width: 0,
+    height: 0,
+    sentences: safeSentences,
   };
-  
+
+
+  window.pageToMovie = {
+    videoReady: false,
+    cleanup() {
+      window.removeEventListener("resize", handleResize);
+    },
+  };
+
+  window.addEventListener("resize", handleResize);
+
   resizeCanvas(state);
-  drawFrame(state, "Hello world!", 1);
+  drawFrame(state, sentences[0], 1);
 })();

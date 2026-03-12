@@ -465,7 +465,6 @@
 
 
   window.pageToMovie = {
-    videoReady: false,
     cleanup() {
       state.running = false;
 

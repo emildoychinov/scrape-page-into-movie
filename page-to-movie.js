@@ -1,4 +1,9 @@
 (() => {
+  //first clean up the page
+  if (window.pageToMovie && typeof window.pageToMovie.cleanup === "function") {
+    window.pageToMovie.cleanup();
+  }
+
   // the average reading speed is 200 words per minute
   const SENTENCE_LENGTH = 200;
 
@@ -48,7 +53,7 @@
       ...document.querySelectorAll("article, main, section, div, [role='main']"),
     ];
 
-      /* find the node with the highest score : 
+    /* find the node with the highest score : 
     /* i.e the with the most text and paragraphs and least links 
     */
     let bestNode = document.body;
@@ -229,5 +234,19 @@
 
     return { canvas, context };
   }
+
+  function cleanup() {
+    const html = document.documentElement;
+    const body = document.body;
+    const canvas = document.querySelector("canvas");
+
+    html.style.margin = "";
+    html.style.width = "";
+    html.style.height = "";
+  }
+
+  window.pageToMovie = {
+    cleanup,
+  };
   
 })();

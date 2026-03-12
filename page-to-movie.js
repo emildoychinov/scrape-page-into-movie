@@ -1,85 +1,202 @@
-function extractText() {
-  const targetSelectors = [
-    "script",
-    "style",
-    "noscript",
-    "nav",
-    "header",
-    "footer",
-    "aside",
-    "form",
-    "svg",
-    "canvas",
-    "iframe",
-    "ads",
-  ];
+(() => {
+  // the average reading speed is 200 words per minute
+  const SENTENCE_LENGTH = 200;
 
-  /* clean up the page contents from elements we do not want to parse 
-    /* since they most likely will not contain any useful text 
-    */
-
-  targetSelectors.forEach((selector) => {
-    document.querySelectorAll(selector).forEach((element) => element.remove());
-  });
-
-  // go through only the most commonly used nodes accross article sites and docs
-  const targetNodes = [
-    ...document.querySelectorAll("article, main, section, div"),
-  ];
-
-  /* find the node with the highest score : 
-    /* i.e the with the most text and paragraphs and least links 
-    */
-
-  let bestNode = document.body;
-  let bestScore = 0;
-
-  for (const node of targetNodes) {
-    const text = node.innerText || "";
-    const length = text.trim().length;
-
-    // skip nodes that are likely to contain no useful text
-
-    if (
-      /comment|meta|footer|footnote|sidebar|widget|nav/i.test(node.className)
-    ) {
-      continue;
-    }
-
-    // skip nodes that are likely to contain no useful text since it is too short
-    if (length < 200) continue;
-
-    // count the number of paragraphs and links in the node
-    const paragraphCount = node.querySelectorAll("p").length;
-    const linkCount = node.querySelectorAll("a").length;
-
-    // calculate how much links there are per chunk of text, i.e link frequency
-    const linkFrequency = linkCount / (length || 1);
-
-    // use a scoring system to determine the best node
-    const score = length * 1 + paragraphCount * 100 - linkFrequency * 500;
-
-    // the container with the highest score, i.e longest and with least links wins
-    // naturally this means the article container in most pages
-    if (score > bestScore) {
-      bestScore = score;
-      bestNode = node;
-    }
+  //text normalization
+  function normalizeText(value) {
+    //if we have multiple spaces, they should be replaced, then the text should be trimmed
+    return value.replace(/\s+/g, " ").trim();
   }
 
-  // target only the most common elements that are likely to contain useful text
+  //html element visibility
+  function isVisible(element) {
+    //if the element is not an instance of an element of the Document then obviously it is not visible 
+    if (!(element instanceof Element)) return false;
 
-  const elements = bestNode.querySelectorAll(
-    "h1,h2,h3,h4,p,li,blockquote,pre,code",
-  );
+    //hidden properties - self explanatory
+    if (element.hidden || element.getAttribute("aria-hidden") === "true") {
+      return false;
+    }
 
-  // extract the text from the elements and join them with newlines
-  const text = [...elements]
-    .map((element) => element.innerText.trim())
-    .filter(Boolean)
-    .join("\n\n");
+    const style = window.getComputedStyle(element);
 
-  return text;
-}
+    if (
+      style.display === "none" ||
+      style.visibility === "hidden" ||
+      style.visibility === "collapse" ||
+      Number(style.opacity) === 0
+    ) {
+      return false;
+    }
 
-console.log(extractText());
+    //position relative to the viewport
+    const rect = element.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0;
+  }
+
+  function getTextContainers(node) {
+    return [
+      ...node.querySelectorAll("h1,h2,h3,h4,h5,h6,p,li,blockquote,pre,code"),
+    ].filter(isVisible);
+  }
+
+  //text extraction
+  function extractText() {
+
+    // only the most commonly used nodes accross article sites and docs (for most websites)
+    const targetNodes = [
+      ...document.querySelectorAll("article, main, section, div, [role='main']"),
+    ];
+
+      /* find the node with the highest score : 
+    /* i.e the with the most text and paragraphs and least links 
+    */
+    let bestNode = document.body;
+    let bestScore = 0;
+
+    for (const node of targetNodes) {
+      if (!isVisible(node)) continue;
+
+      const nodeClass = `${node.id} ${node.className}`;
+
+       // skip nodes that are likely to contain no useful text
+      if (
+        /comment|meta|footer|footnote|sidebar|widget|nav|menu|toolbar|popup|modal|banner/i.test(
+          nodeClass,
+        )
+      ) {
+        continue;
+      }
+
+      // target only the most common elements that are likely to contain useful text
+      const nodeTextContainers = getTextContainers(node);
+
+      if (!nodeTextContainers.length) continue;
+
+      // extract text from those elements
+      const text = nodeTextContainers
+        .map((element) => normalizeText(element.innerText || ""))
+        .filter(Boolean)
+        .join(" ");
+
+      const length = text.length;
+
+      // skip nodes that are likely to contain no useful text since it is too short
+      if (length < SENTENCE_LENGTH) continue;
+
+      // count the number of paragraphs, links and headings in the node
+      const paragraphCount = node.querySelectorAll("p").length;
+      const headingCount = node.querySelectorAll("h1,h2,h3").length;
+      const linkCount = [...node.querySelectorAll("a")].reduce(
+        (total, link) => total + normalizeText(link.innerText || "").length,
+        0,
+      );
+
+      // calculate how much links there are per chunk of text, i.e link frequency
+      const linkFrequency = linkCount / Math.max(length, 1);
+      // use a scoring system to determine the best node
+      const score =
+        length + paragraphCount * 120 + headingCount * 80 - linkFrequency * 700;
+
+
+      // the container with the highest score, i.e longest and with least links wins
+      // naturally this means the article container in most pages
+      if (score > bestScore) {
+        bestScore = score;
+        bestNode = node;
+      }
+    }
+
+    // target only the most common elements that are likely to contain useful text
+    const bestNodeTextContainers = getTextContainers(bestNode);
+
+    //list of uniquely seen text chunks
+    const seen = new Set();
+    const lines = [];
+
+    for (const element of bestNodeTextContainers) {
+      const text = normalizeText(element.innerText || "");
+
+      if (!text || text.length < 2 || seen.has(text)) continue;
+
+      seen.add(text);
+      lines.push(text);
+    }
+
+    return lines.join("\n\n") || normalizeText(bestNode.innerText || "");
+  }
+
+  // split the sentence into parts by commas, semicolons, colons and spaces
+  function splitSentence(sentence) {
+    if (sentence.length <= SENTENCE_LENGTH) return [sentence];
+
+    const sentenceChunks = sentence
+      .split(/(?<=[,;:])\s+/)
+      .map((chunk) => chunk.trim())
+      .filter(Boolean);
+
+    // if its just one part, return the sentence
+    if (sentenceChunks.length === 1) return [sentence];
+
+    const chunks = [];
+    let currentChunk = "";
+
+    // construct the parts
+    for (const chunk of sentenceChunks) {
+      const nextChunk = currentChunk ? `${currentChunk} ${chunk}` : chunk;
+
+      // if the next sentence is longer than the desired character limit
+      // we push the current part and we continue with the splitting
+      if (nextChunk.length > SENTENCE_LENGTH && currentChunk) {
+        chunks.push(currentChunk);
+        currentChunk = chunk;
+      } else {
+        currentChunk = nextChunk;
+      }
+    }
+
+    // push the last chunk if it is not empty
+    if (currentChunk) chunks.push(currentChunk);
+
+    return chunks;
+  }
+
+  // split a large text into sentences
+  function splitIntoSentences(text) {
+    const cleanText = normalizeText(text);
+
+    if (!cleanText) return [];
+
+    let sentences = [];
+
+    // use the Intl.Segmenter API if available, otherwise resort to regex
+    if (typeof Intl !== "undefined" && Intl.Segmenter) {
+      const segmenter = new Intl.Segmenter(undefined, {
+        granularity: "sentence",
+      });
+
+      sentences = [...segmenter.segment(cleanText)]
+        .map((item) => item.segment.trim())
+        .filter(Boolean);
+    } else {
+      sentences = (cleanText.match(/[^.!?]+(?:[.!?]+|$)/g) || [])
+        .map((item) => item.trim())
+        .filter(Boolean);
+    }
+
+    // split the sentences into chunks
+    return sentences.flatMap(splitSentence).filter(Boolean);
+  }
+
+  //movie per-text duration preparation
+  function getSentenceDuration(sentence) {
+    const words = sentence.split(/\s+/).filter(Boolean).length;
+    // calculate the duration in milliseconds
+    // the average reading speed is 200 WPM
+    // we multiply by 60000 to convert to milliseconds
+    const duration = words / 200 * 60000
+    return duration;
+  }
+
+  
+})();

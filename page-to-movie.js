@@ -1,12 +1,11 @@
 (() => {
   //first clean up the page
-  let text = "";
   if (window.pageToMovie && typeof window.pageToMovie.cleanup === "function") {
     window.pageToMovie.cleanup();
   }
 
   // the average reading speed is 200 words per minute
-  const SENTENCE_LENGTH = 200;
+  const WPM = 225;
 
   //text normalization
   function normalizeText(value) {
@@ -65,7 +64,7 @@
 
       const nodeClass = `${node.id} ${node.className}`;
 
-       // skip nodes that are likely to contain no useful text
+      // skip nodes that are likely to contain no useful text
       if (
         /comment|meta|footer|footnote|sidebar|widget|nav|menu|toolbar|popup|modal|banner/i.test(
           nodeClass,
@@ -88,7 +87,7 @@
       const length = text.length;
 
       // skip nodes that are likely to contain no useful text since it is too short
-      if (length < SENTENCE_LENGTH) continue;
+      if (length < WPM) continue;
 
       // count the number of paragraphs, links and headings in the node
       const paragraphCount = node.querySelectorAll("p").length;
@@ -134,7 +133,7 @@
 
   // split the sentence into parts by commas, semicolons, colons and spaces
   function splitSentence(sentence) {
-    if (sentence.length <= SENTENCE_LENGTH) return [sentence];
+    if (sentence.length <= WPM) return [sentence];
 
     const sentenceChunks = sentence
       .split(/(?<=[,;:])\s+/)
@@ -153,7 +152,7 @@
 
       // if the next sentence is longer than the desired character limit
       // we push the current part and we continue with the splitting
-      if (nextChunk.length > SENTENCE_LENGTH && currentChunk) {
+      if (nextChunk.length > WPM && currentChunk) {
         chunks.push(currentChunk);
         currentChunk = chunk;
       } else {
@@ -200,7 +199,7 @@
     // calculate the duration in milliseconds
     // the average reading speed is 200 WPM
     // we multiply by 60000 to convert to milliseconds
-    const duration = words / 200 * 60000
+    const duration = words / WPM * 60000
     return duration;
   }
 
@@ -383,6 +382,66 @@
     drawFrame(state, currentSentence ? currentSentence.text : "", 1);
   };
 
+  //finish the movie
+  function finishPlayback(state) {
+    if (!state.running) return;
+
+    state.running = false;
+    drawFrame(state, "", 1);
+  }
+
+  //play the movie
+  function play(state) {
+    state.running = true;
+    state.index = 0;
+    state.startedAt = 0;
+
+    //animation loop
+    const tick = (now) => {
+      if (!state.running) return;
+
+      if (!state.startedAt) {
+        state.startedAt = now;
+      }
+
+      // get the current sentence
+      const current = state.sentences[state.index];
+
+      if (!current) {
+        // if there is no current sentence stop
+        finishPlayback(state);
+        return;
+      }
+
+      const fadeDuration = Math.min(500, current.duration * 0.25);
+      const totalDuration = current.duration + fadeDuration * 2;
+      const elapsed = now - state.startedAt;
+
+      // if the elapsed time for the display is more than what it should be, go to the next sentence
+      if (elapsed >= totalDuration) {
+        state.index += 1;
+        state.startedAt = now;
+
+        //finish the movie if there are no more sentences
+        if (state.index >= state.sentences.length) {
+          finishPlayback(state);
+          return;
+        }
+      }
+
+      const currentSentence = state.sentences[state.index];
+      const currentElapsed = now - state.startedAt;
+      const opacity = getOpacity(currentElapsed, currentSentence.duration);
+
+      drawFrame(state, currentSentence.text, opacity);
+      // request the next frame with the next text chun
+      state.rafId = window.requestAnimationFrame(tick);
+    };
+
+    // start the animation loop
+    state.rafId = window.requestAnimationFrame(tick);
+  }
+
   const extractedText = extractText();
   const sentences = splitIntoSentences(extractedText);
   const safeSentences = (sentences.length
@@ -398,12 +457,24 @@
     width: 0,
     height: 0,
     sentences: safeSentences,
+    index: 0,
+    startedAt: 0,
+    running: false,
+    rafId: 0,
   };
 
 
   window.pageToMovie = {
     videoReady: false,
     cleanup() {
+      state.running = false;
+
+      // if there is an ongoing animation, cancel it
+      if (state.rafId) {
+        window.cancelAnimationFrame(state.rafId);
+      }
+
+      // remove the resize listener and replace it with the one for the canvas
       window.removeEventListener("resize", handleResize);
     },
   };
@@ -411,5 +482,6 @@
   window.addEventListener("resize", handleResize);
 
   resizeCanvas(state);
-  drawFrame(state, sentences[0], 1);
+  drawFrame(state, "", 1);
+  play(state);
 })();

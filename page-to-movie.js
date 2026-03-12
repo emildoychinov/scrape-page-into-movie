@@ -235,15 +235,67 @@
     return { canvas, context };
   }
 
-  function cleanup() {
-    const html = document.documentElement;
-    const body = document.body;
-    const canvas = document.querySelector("canvas");
+  //visuals for canvas frame
+  function resizeCanvas(state) {
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    const framePadding = Math.min(80, Math.max(24, viewportWidth * 0.06));
+    let width = Math.min(1280, viewportWidth - framePadding * 2);
+    let height = Math.min(720, viewportHeight - framePadding * 2);
+    const aspectRatio = 16 / 9;
 
-    html.style.margin = "";
-    html.style.width = "";
-    html.style.height = "";
+    if (width / height > aspectRatio) {
+      width = height * aspectRatio;
+    } else {
+      height = width / aspectRatio;
+    }
+
+    width = Math.max(420, Math.round(width));
+    height = Math.max(236, Math.round(height));
+
+    const pixelRatio = window.devicePixelRatio || 1;
+
+    state.width = width;
+    state.height = height;
+    state.canvas.width = Math.round(width * pixelRatio);
+    state.canvas.height = Math.round(height * pixelRatio);
+    state.canvas.style.width = `${width}px`;
+    state.canvas.style.height = `${height}px`;
+    state.context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
   }
+
+  //wrap lines for text layout - same as sentence splitting
+  function wrapLines(context, text, maxWidth) {
+    //split the text into words
+    const words = text.split(/\s+/).filter(Boolean);
+    const lines = [];
+    let currentLine = "";
+
+    for (const word of words) {
+      const nextLine = currentLine ? `${currentLine} ${word}` : word;
+
+      // if the next line is longer than the max width or there is no current line
+      // add the word to the current line
+      if (context.measureText(nextLine).width <= maxWidth || !currentLine) {
+        currentLine = nextLine;
+      } else {
+        lines.push(currentLine);
+        currentLine = word;
+      }
+    }
+
+    if (currentLine) lines.push(currentLine);
+
+    return lines;
+  }
+
+  function cleanup() {
+    window.removeEventListener("resize", handleResize);
+  }
+
+  handleResize = () => {
+    resizeCanvas(state);
+  };
 
   window.pageToMovie = {
     cleanup,
